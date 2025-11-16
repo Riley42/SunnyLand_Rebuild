@@ -93,7 +93,7 @@ public class PossumMovement : MonoBehaviour
                 break;
         }
 
-        
+        UpdateFacing();
     }
 
     private void SetPatrol()
@@ -129,14 +129,11 @@ public class PossumMovement : MonoBehaviour
         reachedDestination = Vector2.Distance(destPos, transform.position) < 0.2f;
         transform.position = Vector2.MoveTowards(transform.position, destPos, currentSpeed * Time.fixedDeltaTime);
 
-        UpdateFacing(destPos);
     }
     private void Chase()
     {
         Vector3 destPos = new Vector3(target.position.x, transform.position.y, transform.position.z);
         transform.position = Vector2.MoveTowards(transform.position, destPos, currentSpeed * Time.fixedDeltaTime);
-
-        UpdateFacing(destPos);
     }
     private void ResetPossum()
     {
@@ -149,7 +146,6 @@ public class PossumMovement : MonoBehaviour
         reachedDestination = Vector2.Distance(destPos, transform.position) < 0.2f;
         transform.position = Vector2.MoveTowards(transform.position, destPos, currentSpeed * Time.fixedDeltaTime);
 
-        UpdateFacing(destPos);
     }
     private Transform CheckForPlayer()
     {
@@ -161,9 +157,9 @@ public class PossumMovement : MonoBehaviour
         }
         return null;
     }
-    private void UpdateFacing(Vector3 destPos)
+    private void UpdateFacing()
     {
-        Vector3 facing = destPos - transform.position;
+        Vector3 facing = target.position - transform.position;
 
         if (facing.x > 0)
         {

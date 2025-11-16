@@ -8,28 +8,50 @@ public enum FrogState
     RESET,
     STUN
 }
+public enum JumpState
+{
+    IDLE = 0,
+    JUMPING = 1,
+    FALLING = 2
+}
 public class FrogMovement : MonoBehaviour
 {
+    [Header("Croak")]
     bool isCroakIdle = true;
     float croakTimer;
     float timeTilNextCroak = 7f;
 
-    bool isJumpIdle = true;
-    bool isGrounded;
+    [Header("Data")]
     int currentPoint;
-    float jumpTimer;
     float currentSpeed;
-    float combatCheckDistance = 3f;
     Transform target;
     FrogState currentState = FrogState.PATROL;
 
-    [SerializeField] float patrolSpeed = 3f;
-    [SerializeField] float chaseSpeed = 1.5f;
+    [Header("Jumping")]
     [SerializeField] float jumpForceX;
     [SerializeField] float jumpForceY;
-    [SerializeField] List<Transform> patrolPoints;
     [SerializeField] Transform groundCheck;
+    bool isJumpIdle = true;
+    bool isGrounded;
+    float jumpTimer;
+    JumpState currentJumpState = JumpState.IDLE;
 
+    [Header("Patrol")]
+    [SerializeField] float patrolSpeed = 3f;
+    [SerializeField] List<Transform> patrolPoints;
+    bool reachedDestination;
+    
+    [Header("Combat")]
+    [SerializeField] float chaseSpeed = 1.5f;
+    [SerializeField] float jumpLengthModifier = 1.5f;
+    [SerializeField] float jumpHeightModifier = .75f;
+    float combatCheckDistance = 3f;
+
+    [Header("Reset")]
+    float chaseDuration = 2.5f;
+    float chaseTimer;
+    Transform resetTarget;
+    
     Animator anim;
     Rigidbody2D rb;
 
@@ -62,56 +84,64 @@ public class FrogMovement : MonoBehaviour
         }
         else
         {
-            // HandleInAirState();
+            HandleInAirStates();
         }
 
 
         switch (currentState)
-            {
-                case FrogState.PATROL:
+        {
+            case FrogState.PATROL:
 
-                    if (IsTimeToJump())
+                if (IsTimeToJump())
+                {
+                    Patrol();
+                }
+
+                if (player != null)
+                {
+                    SetChase(player);
+                }
+                break;
+            case FrogState.CHASE:
+
+                if (IsTimeToJump()) 
+                { 
+                    Chase();
+                }
+
+                if (player == null)
+                {
+                    if (chaseTimer > 0)
                     {
-                        Patrol();
+                        chaseTimer -= Time.fixedDeltaTime;
                     }
-
-                    if (player != null)
+                    else
                     {
-                        SetChase(player);
+                        SetReset();
                     }
-                    break;
-                case FrogState.CHASE:
+                }
+                else
+                {
+                    chaseTimer = chaseDuration;
+                }
 
-                    //Chase();
+                break;
+            case FrogState.RESET:
+                
+                if (IsTimeToJump())
+                {
+                    ResetFrog();
+                }
 
-                    //if (player == null)
-                    //{
-                    //    if (chaseTimer > 0)
-                    //    {
-                    //        chaseTimer -= Time.fixedDeltaTime;
-                    //    }
-                    //    else
-                    //    {
-                    //        SetReset();
-                    //    }
-                    //}
-                    //else
-                    //{
-                    //    chaseTimer = chaseDuration;
-                    //}
-
-                    break;
-                case FrogState.RESET:
-
-                    //ResetPossum();
-
-                    break;
-                case FrogState.STUN:
-                    //Stun();
-                    break;
-            }
+                break;
+            case FrogState.STUN:
+                //Stun();
+                break;
+        }
+        anim.SetInteger("jumpState", (int)currentJumpState);
     }
-    bool CheckIsGrounded()
+    
+    private bool CheckIsGrounded()
     {
         bool wasGrounded = isGrounded;
 
@@ -123,7 +153,7 @@ public class FrogMovement : MonoBehaviour
                          //Vector2.down, 0, isGrounded ? Color.green : Color.red);
         return wasGrounded;
     }
-    bool IsTimeToJump()
+    private bool IsTimeToJump()
     {
         if (isJumpIdle & isCroakIdle)
         {
@@ -132,11 +162,81 @@ public class FrogMovement : MonoBehaviour
             if (jumpTimer <= 0f)
             {
                 isJumpIdle = false;
+                UpdateFacing();
                 return true;
             }
         }
+
         return false;
     }
+
+    private void HandleLanding(bool wasGrounded)
+    {
+        if (!wasGrounded)
+        {
+            isJumpIdle = true;
+            jumpTimer = currentSpeed;
+            rb.linearVelocity = Vector2.zero;
+            currentJumpState = JumpState.IDLE;
+        }
+    }
+    private void HandleInAirStates()
+    {
+        if (rb.linearVelocity.y > 0.1f)
+        {
+            currentJumpState = JumpState.JUMPING;
+        }
+        else if (rb.linearVelocity.y < -0.1f)
+        {
+            currentJumpState = JumpState.FALLING;
+        }
+    }
+
+    private void SetPatrol()
+    {
+        currentState = FrogState.PATROL;
+        currentSpeed = patrolSpeed;
+        resetTarget = null;
+    }
+    private void SetChase(Transform player)
+    {
+        resetTarget = target;
+
+        currentState = FrogState.CHASE;
+        target = player;
+        currentSpeed = chaseSpeed;
+        chaseTimer = chaseDuration;
+        jumpTimer = 0;
+    }
+    private void SetReset()
+    {
+        currentState = FrogState.RESET;
+        target = resetTarget;
+    }
+    private void Patrol()
+    {
+        int direction = (target.position.x < transform.position.x) ? -1 : 1;
+        rb.linearVelocity = new Vector2(jumpForceX * direction, jumpForceY);
+    }
+    private void Chase()
+    {
+        int direction = (target.position.x < transform.position.x) ? -1 : 1;
+        rb.linearVelocity = new Vector2(jumpForceX * direction * jumpLengthModifier, 
+                                        jumpForceY * jumpHeightModifier);
+
+    }
+    private void ResetFrog()
+    {
+        reachedDestination = Vector2.Distance(target.position, transform.position) < 2f;
+        if (reachedDestination)
+        {
+            SetPatrol();
+        }
+
+        int direction = (target.position.x < transform.position.x) ? -1 : 1;
+        rb.linearVelocity = new Vector2(jumpForceX * direction, jumpForceY);
+    }
+
     private Transform CheckForPlayer()
     {
         Debug.DrawRay(transform.position, Vector2.left * transform.localScale.x * combatCheckDistance, Color.red);
@@ -147,30 +247,22 @@ public class FrogMovement : MonoBehaviour
         }
         return null;
     }
-
-    void HandleLanding(bool wasGrounded)
+    private void UpdateFacing()
     {
-        if (!wasGrounded)
+        Vector3 facing = target.position - transform.position;
+
+        if (facing.x > 0)
         {
-            isJumpIdle = true;
-            jumpTimer = currentSpeed;
-            rb.linearVelocity = Vector2.zero;
+            transform.localScale = new Vector3(-Mathf.Abs(transform.localScale.x), transform.localScale.y, transform.localScale.z);
+        }
+        else if (facing.x < 0)
+        {
+            transform.localScale = new Vector3(Mathf.Abs(transform.localScale.x), transform.localScale.y, transform.localScale.z);
         }
     }
-    
-    void SetChase(Transform player)
-    {
-        currentState = FrogState.CHASE;
-        target = player;
-        currentSpeed = chaseSpeed;
-    }
-    void Patrol()
-    {
-        int direction = (target.position.x < transform.position.x) ? -1 : 1;
-        rb.linearVelocity = new Vector2(jumpForceX * direction, jumpForceY);
-    }
 
-    void PlayCroakAnimation()
+
+    private void PlayCroakAnimation()
     {
         if (isJumpIdle & isCroakIdle)
         {
